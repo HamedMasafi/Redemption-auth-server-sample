@@ -7,21 +7,37 @@
 
 class Writer {
 private:
-    QByteArray buffer;
+    QByteArray _buffer;
+    int _count{0};
 
 public:
     void pushAsk(const QString& name) {
-        buffer.append("?");
-        buffer.append(name.size());
-        buffer.append(name.toUtf8());
+        _buffer.append("?");
+        _buffer.append(name.size());
+        _buffer.append(name.toUtf8());
+        _count++;
     }
     void pushNameValue(const QString& name, const QString &value) {
-        buffer.append("!");
-        buffer.append(name.size());
-        buffer.append(name.toUtf8());
-        buffer.append(value.size());
-        buffer.append(value.toUtf8());
+        _buffer.append("!");
+        _buffer.append(name.size());
+        _buffer.append(name.toUtf8());
+
+        auto n = value.size();
+        char ch1 = n & 0xFF;
+        n >>= 8;
+        char ch2 = n & 0xFF;
+        n >>= 8;
+        char ch3 = n & 0xFF;
+        n >>= 8;
+        char ch4 = n & 0xFF;
+        _buffer.append(ch4);
+        _buffer.append(ch3);
+        _buffer.append(ch2);
+        _buffer.append(ch1);
+        _buffer.append(value.toUtf8());
+        _count++;
     }
+    QByteArray createBuffer() const;
 };
 
 struct Field {
@@ -52,6 +68,10 @@ private:
 
 public:
     Reader(const QByteArray &buffer) : _buffer(buffer) {
+        auto ch1 = buffer.at(0);
+        auto ch2 = buffer.at(1);
+        auto len = (ch2 << 8) + ch1;
+        qDebug() << "header=" << len << QString::number(ch1) << QString::number(ch2) << "*";
         _index = 2;
     }
 
@@ -89,7 +109,7 @@ public:
             readName(f);
             readValue(f);
         } else if (type == '?'){
-            f.isAsk = false;
+            f.isAsk = true;
             readName(f);
         } else {
             qDebug() << "Invalid index" << type;
@@ -117,32 +137,6 @@ SocketServer::SocketServer() : QTcpServer()
 
 void SocketServer::socket_readyRead()
 {
-    QStringList list{
-        "\x00\x17",
-        "?\x0ftarget_password",
-        "?\x0btarget_host",
-        "?\x0aproto_dest",
-        "?\x08password",
-        "?\x05login",
-        "?\x0dtarget_device",
-        "?\x0ctarget_login",
-        "!\x03""bpp\x00\x00\x00\x02""24",
-        "!\x05width\x00\x00\x00\x03""800",
-        "!\x06height\x00\x00\x00\x03""600",
-        "!\x15selector_current_page\x00\x00\x00\x01\x31",
-        "!\x16selector_device_filter\x00\x00\x00\x00",
-        "!\x15selector_group_filter\x00\x00\x00\x00",
-        "!\x15selector_proto_filter\x00\x00\x00\x00",
-        "!\x17selector_lines_per_page\x00\x00\x00\x01\x30",
-        "!\x09reporting\x00\x00\x00\x00",
-        "!\x13""auth_channel_target\x00\x00\x00\x00",
-        "!\x0e""accept_message\x00\x00\x00\x05""False",
-        "!\x0f""display_message\x00\x00\x00\x05""False",
-        "!\x12real_target_device\x00\x00\x00\x00",
-        "!\x09ip_client\x00\x00\x00\x00",
-        "!\x09ip_target\x00\x00\x00\x00",
-        "!\x0elogin_language\x00\x00\x00\x04""Auto"
-    };
     auto socket = qobject_cast<QTcpSocket*>(sender());
 
     if (!socket)
@@ -152,11 +146,31 @@ void SocketServer::socket_readyRead()
     Reader r(buffer);
 
     Field f;
+    Writer w;
+    int index = 0;
     while ((f = r.read()) != Field()) {
-        qDebug() << "Field" << f.name << f.value << f.isAsk;
+        qDebug() << "Field" << (++index) << f.name << f.value << f.isAsk;
+
+        if (f.isAsk)
+            w.pushAsk(f.name);
+        else
+            w.pushNameValue(f.name, f.value);
     }
 
-    qDebug() << buffer;//.split('\x0B');
+
+    qDebug() << (w.createBuffer() == buffer) ;
+    qDebug()<< buffer; //.split('\x0B');
+    qDebug()<< w.createBuffer();
+
+    Writer w2;
+    w2.pushAsk("target_password");
+    w2.pushAsk("target_host");
+    w2.pushAsk("login");
+    w2.pushAsk("ip_target");
+    w2.pushAsk("target_login");
+    w2.pushNameValue("module", "interactive_target");
+    w2.pushNameValue("mod_rdp:enable_session_probe", "False");
+    socket->write(w2.createBuffer());
 }
 
 void SocketServer::incomingConnection(qintptr handle)
@@ -171,4 +185,17 @@ void SocketServer::incomingConnection(qintptr handle)
     connect(socket, &QTcpSocket::readyRead, this, &SocketServer::socket_readyRead);
 
 
+}
+
+
+QByteArray Writer::createBuffer() const
+{
+    auto b = _buffer;
+    auto n = _count;
+    char ch1 = n & 0xFF;
+    n >>= 8;
+    char ch2 = n & 0xFF;
+    b.prepend(ch1);
+    b.prepend(ch2);
+    return b;
 }
