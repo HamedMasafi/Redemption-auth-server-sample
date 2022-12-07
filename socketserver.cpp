@@ -3,132 +3,12 @@
 #include <QTcpSocket>
 #include <QDebug>
 #include <QObject>
+#include <QUuid>
 
-
-class Writer {
-private:
-    QByteArray _buffer;
-    int _count{0};
-
-public:
-    void pushAsk(const QString& name) {
-        _buffer.append("?");
-        _buffer.append(name.size());
-        _buffer.append(name.toUtf8());
-        _count++;
-    }
-    void pushNameValue(const QString& name, const QString &value) {
-        _buffer.append("!");
-        _buffer.append(name.size());
-        _buffer.append(name.toUtf8());
-
-        auto n = value.size();
-        char ch1 = n & 0xFF;
-        n >>= 8;
-        char ch2 = n & 0xFF;
-        n >>= 8;
-        char ch3 = n & 0xFF;
-        n >>= 8;
-        char ch4 = n & 0xFF;
-        _buffer.append(ch4);
-        _buffer.append(ch3);
-        _buffer.append(ch2);
-        _buffer.append(ch1);
-        _buffer.append(value.toUtf8());
-        _count++;
-    }
-    QByteArray createBuffer() const;
-};
-
-struct Field {
-    QString name;
-    QString value;
-    bool isAsk;
-    bool isValid;
-
-    Field() : isValid(false) {}
-    Field(const QString &name)
-        : name(name)
-        , isAsk(true)
-        , isValid(true)
-    {}
-    Field(const QString &name, const QString &value)
-        : name(name)
-        , value(value)
-        , isAsk(false)
-        , isValid(true)
-    {}
-};
-
-class Reader
-{
-private:
-    QByteArray _buffer;
-    int _index;
-
-public:
-    Reader(const QByteArray &buffer) : _buffer(buffer) {
-        auto ch1 = buffer.at(0);
-        auto ch2 = buffer.at(1);
-        auto len = (ch2 << 8) + ch1;
-        qDebug() << "header=" << len << QString::number(ch1) << QString::number(ch2) << "*";
-        _index = 2;
-    }
-
-    void readName(Field &f)
-    {
-        int len = _buffer.at(_index);
-        _index++;
-        f.name = _buffer.mid(_index, len);
-        _index += len;
-    }
-
-    void readValue(Field &f)
-    {
-        auto ch1 = _buffer.at(_index);
-        auto ch2 = _buffer.at(_index + 1);
-        auto ch3 = _buffer.at(_index + 2);
-        auto ch4 = _buffer.at(_index + 3);
-        auto len = (ch1 << 24) + (ch2 << 16) + (ch3 << 8) + ch4;
-
-        _index += 4;
-        f.value = _buffer.mid(_index, len);
-        _index += len;
-    }
-
-    Field read() {
-        if (_index >= _buffer.size())
-            return {};
-
-        auto type = _buffer.at(_index);
-        _index++;
-
-        Field f;
-        if (type == '!') {
-            f.isAsk = false;
-            readName(f);
-            readValue(f);
-        } else if (type == '?'){
-            f.isAsk = true;
-            readName(f);
-        } else {
-            qDebug() << "Invalid index" << type;
-            return {};
-        }
-
-        return f;
-    }
-};
-
-bool operator==(const Field &f1, const Field &f2)
-{
-    return f1.isValid == f2.isValid && f1.name == f2.name;
-}
-
-bool operator!=(const Field &f1, const Field &f2)
-{
-    return !(f1== f2);
-}
+#include "packetreader.h"
+#include "packetwriter.h"
+#include "field.h"
+#include "client.h"
 
 SocketServer::SocketServer() : QTcpServer()
 {
@@ -137,7 +17,7 @@ SocketServer::SocketServer() : QTcpServer()
 
 void SocketServer::socket_readyRead()
 {
-    auto socket = qobject_cast<QTcpSocket*>(sender());
+    auto socket = qobject_cast<Client*>(sender());
 
     if (!socket)
         return;
@@ -145,10 +25,9 @@ void SocketServer::socket_readyRead()
     auto buffer = socket->readAll();
     Reader r(buffer);
 
-    Field f;
-    Writer w;
+    PacketWriter w;
     int index = 0;
-    while ((f = r.read()) != Field()) {
+    for (const auto &f: r) {
         qDebug() << "Field" << (++index) << f.name << f.value << f.isAsk;
 
         if (f.isAsk)
@@ -157,45 +36,59 @@ void SocketServer::socket_readyRead()
             w.pushNameValue(f.name, f.value);
     }
 
+    qDebug() << (w.createBuffer() == buffer);
+    qDebug() << buffer; //.split('\x0B');
+    qDebug() << w.createBuffer();
 
-    qDebug() << (w.createBuffer() == buffer) ;
-    qDebug()<< buffer; //.split('\x0B');
-    qDebug()<< w.createBuffer();
+    switch (socket->status()) {
+    case Client::Init: {
+        PacketWriter w2;
+        w2.pushAsk("target_password");
+        w2.pushAsk("target_host");
+        w2.pushAsk("login");
+        w2.pushAsk("ip_target");
+        w2.pushAsk("target_login");
+        w2.pushNameValue("module", "interactive_target");
+        w2.pushNameValue("mod_rdp:enable_session_probe", "False");
+        socket->write(w2.createBuffer());
+        socket->setStatus(Client::UsernamePassword);
+        break;
+    }
+    case Client::UsernamePassword: {
+        PacketWriter w2;
+        auto host = r.field("target_host").value;
+        auto password =  r.field("target_password").value;
+        auto sessionId = QUuid::createUuid().toString(QUuid::Id128);
+        w2.pushNameValue("target_password", password);
+        w2.pushNameValue("target_host", host);
+        w2.pushNameValue("password", password);
+        w2.pushNameValue("ip_target", host);
+        w2.pushNameValue("target_device", host);
+        w2.pushNameValue("mod_rdp:enable_session_probe", "True");
+        w2.pushNameValue("proto_dest", "RDP");
+        w2.pushNameValue("module", "RDP");
+        w2.pushNameValue("target_port", "3389");
+        w2.pushNameValue("session_id", sessionId);
+        w2.pushNameValue("rec_path", sessionId);
+        w2.pushNameValue("session_log_path", sessionId + ".log");
+        w2.pushNameValue("rt_display", "False");
 
-    Writer w2;
-    w2.pushAsk("target_password");
-    w2.pushAsk("target_host");
-    w2.pushAsk("login");
-    w2.pushAsk("ip_target");
-    w2.pushAsk("target_login");
-    w2.pushNameValue("module", "interactive_target");
-    w2.pushNameValue("mod_rdp:enable_session_probe", "False");
-    socket->write(w2.createBuffer());
+        socket->write(w2.createBuffer());
+        socket->setStatus(Client::UnKnown);
+        break;
+    }
+    case Client::UnKnown:
+        break;
+    }
 }
 
 void SocketServer::incomingConnection(qintptr handle)
 {
     qDebug() << "New connection";
-    auto socket = new QTcpSocket(this);
+    auto socket = new Client(this);
     socket->setSocketDescriptor(handle);
 
-
-//    auto nextSocket = nextPendingConnection();
-
     connect(socket, &QTcpSocket::readyRead, this, &SocketServer::socket_readyRead);
-
-
 }
 
 
-QByteArray Writer::createBuffer() const
-{
-    auto b = _buffer;
-    auto n = _count;
-    char ch1 = n & 0xFF;
-    n >>= 8;
-    char ch2 = n & 0xFF;
-    b.prepend(ch1);
-    b.prepend(ch2);
-    return b;
-}

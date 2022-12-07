@@ -11,6 +11,8 @@ CONFIG -= app_bundle
 SOURCES += \
 #        acl/acl_serializer.cpp \
         main.cpp \
+        packetreader.cpp \
+        packetwriter.cpp \
         socketserver.cpp
 
 # Default rules for deployment.
@@ -23,4 +25,6 @@ HEADERS += \
 #    acl/acl_serializer.hpp \
 #    acl/acl_verbose.hpp \
 #    acl/auth_api.hpp \
+    packetreader.h \
+    packetwriter.h \
     socketserver.h
