@@ -12,7 +12,6 @@ public:
 
     void readName(Field &f);
     void readValue(Field &f);
-    Field read();
 
     Field field(const QString& name) const;
     QString fieldValue(const QString& name) const;
@@ -28,8 +27,10 @@ public:
     void print() const;
     int count() const;
     const Field &at(int n) const;
+    bool has(const QString &name) const;
 
 private:
+    Field read();
     QList<Field> _fields;
     QByteArray _buffer;
     int _index;

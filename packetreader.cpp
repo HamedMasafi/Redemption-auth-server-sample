@@ -122,3 +122,8 @@ const Field &Reader::at(int n) const
 {
     return _fields.at(n);
 }
+
+bool Reader::has(const QString &name) const
+{
+    return std::any_of(_fields.begin(), _fields.end(), [&name](const Field &f) { return f.name == name; });
+}
