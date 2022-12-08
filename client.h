@@ -6,11 +6,8 @@ class Client : public QTcpSocket
 {
     Q_OBJECT
 public:
-    enum Status {
-        Init,
-        UsernamePassword,
-        UnKnown
-    };
+    enum Status { Idle, UsernamePassword, Connecting, Connected, UnKnown };
+    Q_ENUM(Status);
 
     explicit Client(QObject *parent = nullptr);
 

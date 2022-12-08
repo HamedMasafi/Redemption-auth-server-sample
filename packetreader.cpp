@@ -5,8 +5,8 @@
 Reader::Reader(const QByteArray &buffer) : _buffer(buffer) {
     auto ch1 = buffer.at(0);
     auto ch2 = buffer.at(1);
-    auto len = (ch2 << 8) + ch1;
-    qDebug() << "header=" << len << QString::number(ch1) << QString::number(ch2) << "*";
+    _count = (ch2 << 8) + ch1;
+
     _index = 2;
 
     Field f;
@@ -66,6 +66,14 @@ Field Reader::field(const QString &name) const
     return _fields[std::distance(_fields.begin(), i)];
 }
 
+QString Reader::fieldValue(const QString &name) const
+{
+    auto i = std::find_if(_fields.begin(), _fields.end(), [&name](const Field &f) { return f.name == name; });
+    if (i == _fields.end())
+        return {};
+    return _fields[std::distance(_fields.begin(), i)].value;
+}
+
 QList<Field>::ConstIterator Reader::constBegin()
 {
     return _fields.constBegin();
@@ -84,4 +92,33 @@ QList<Field>::Iterator Reader::begin()
 QList<Field>::Iterator Reader::end()
 {
     return _fields.end();
+}
+
+QByteArray Reader::buffer() const
+{
+    return _buffer;
+}
+
+void Reader::print() const
+{
+    int index{0};
+
+    for (const auto &f: std::as_const(_fields)) {
+        index++;
+
+        if (f.isAsk)
+            qDebug() << "[I]  * Field (ask)" << index << f.name;
+        else
+            qDebug() << "[I]  * Field (val)" << index << f.name << f.value;
+    }
+}
+
+int Reader::count() const
+{
+    return _fields.count();
+}
+
+const Field &Reader::at(int n) const
+{
+    return _fields.at(n);
 }

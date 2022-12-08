@@ -14,7 +14,10 @@ public:
 
 private slots:
     void socket_readyRead();
+    void socket_aboutToClose();
 
+private:
+    bool checkForUsernamePassword(const QString &username, const QString &password);
 protected:
     void incomingConnection(qintptr handle);
 };

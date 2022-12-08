@@ -35,6 +35,11 @@ void PacketWriter::pushNameValue(const QString &name, const QString &value) {
     _count++;
 }
 
+void PacketWriter::pushNameValueBool(const QString &name, bool value)
+{
+    pushNameValue(name, value ? QStringLiteral("True") : QStringLiteral("False"));
+}
+
 QByteArray PacketWriter::createBuffer() const
 {
     auto b = _buffer;

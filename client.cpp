@@ -3,7 +3,7 @@
 Client::Client(QObject *parent)
     : QTcpSocket{parent}
 {
-    _status = Init;
+    _status = Idle;
 }
 
 Client::Status Client::status() const
