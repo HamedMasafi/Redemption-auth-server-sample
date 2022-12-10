@@ -66,6 +66,7 @@ void SocketServer::socket_readyRead()
         w.pushAsk("target_password");
         w.pushAsk("target_host");
         w.pushAsk("target_login");
+        w.pushAsk("target_device");
 #endif
         w.pushAsk("login");
         w.pushAsk("ip_target");
@@ -75,7 +76,7 @@ void SocketServer::socket_readyRead()
         client->write(w.createBuffer());
 
         qDebug() << "[I] Client initalization";
-
+        r.print();
         client->setStatus(Client::UsernamePassword);
         break;
     }
