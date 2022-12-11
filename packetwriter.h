@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QByteArray>
+#include <QVariant>
 
 class PacketWriter {
 private:
@@ -10,7 +11,6 @@ private:
 public:
     PacketWriter();
     void pushAsk(const QString& name);
-    void pushNameValue(const QString& name, const QString &value);
-    void pushNameValueBool(const QString& name, bool value);
+    void pushNameValue(const QString& name, const QVariant &value);
     QByteArray createBuffer() const;
 };

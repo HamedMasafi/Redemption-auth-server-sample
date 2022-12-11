@@ -42,7 +42,7 @@ void SocketServer::socket_readyRead()
     Reader r(buffer);
 
     testBuffer(r);
-
+    r.print();
     auto reporting = r.fieldValue("reporting");
 
     if (reporting != QString{}) {
@@ -67,16 +67,20 @@ void SocketServer::socket_readyRead()
         w.pushAsk("target_host");
         w.pushAsk("target_login");
         w.pushAsk("target_device");
+        w.pushAsk("proto_dest");
 #endif
         w.pushAsk("login");
         w.pushAsk("ip_target");
         w.pushNameValue("module", "interactive_target");
-        w.pushNameValueBool("mod_rdp:enable_session_probe", false);
+        w.pushNameValue("selector", true);
+//        w.pushNameValue("server_cert:server_cert_store", true);
+//        w.pushNameValue("server_cert:server_access_allowed_message", 0x7);
+//        w.pushNameValue("server_cert:server_cert_success_message", 0x7);
+//        w.pushNameValue("server_cert:server_cert_create_message", 0x7);
 
         client->write(w.createBuffer());
 
         qDebug() << "[I] Client initalization";
-        r.print();
         client->setStatus(Client::UsernamePassword);
         break;
     }
@@ -96,20 +100,22 @@ void SocketServer::socket_readyRead()
         w.pushNameValue("password", password);
         w.pushNameValue("proto_dest", "RDP");
         w.pushNameValue("session_id", sessionId);
-        w.pushNameValue("session_log_path", sessionId + ".log");
-        w.pushNameValue("rt_display", "False");
+//        w.pushNameValue("session_log_path", sessionId + ".log");
+        w.pushNameValue("rt_display", false);
         w.pushNameValue("module", "RDP");
-        w.pushNameValue("mod_rdp:enable_session_probe", "True");
+        w.pushNameValue("session_probe:enable_session_probe", false);
+//        w.pushNameValue("enable_external_validation", true);
 
-        w.pushNameValueBool("is_rec", true);
-        w.pushNameValue("rec_path", sessionId);
+        w.pushNameValue("is_rec", true);
+//        w.pushNameValue("rec_path", sessionId);
 
         w.pushNameValue("allow_channels", "*");
         w.pushNameValue("deny_channels", "");
         w.pushNameValue("pattern_kill", "$kbd:");
-        w.pushNameValue("", "");
-        w.pushNameValue("", "");
-        w.pushNameValue("", "");
+        w.pushNameValue("mod_rdp:mode_console", "allow");
+
+//        w.pushNameValue("server_cert:server_cert_check", true);
+//        w.pushNameValue("server_cert:server_cert_store", true);
 
         qDebug() << "[I] Client trying to connect; host=" << host
                  << "; username=" << r.fieldValue("target_login") << "; password=" << password;
@@ -121,12 +127,27 @@ void SocketServer::socket_readyRead()
     case Client::Connecting: {
         auto parts = reporting.split(":");
 
+        if (r.fieldValue("module") == "close") {
+            qDebug() << "[I] Session closed";
+            return;
+        }
+
+        if (r.has("external_response")) {
+            client->setCert(r.fieldValue("external_cert"));
+            PacketWriter w;
+//            w.pushNameValue("keepalive", true);
+            w.pushNameValue("external_response", "Ok");
+//            w.pushNameValue("external_cert", client->cert());
+            client->write(w.createBuffer());
+            qDebug() << "[I] Response to certificate";
+            return;
+        }
         PacketWriter w;
-        w.pushNameValue("keepalive", "True");
+        w.pushNameValue("keepalive", true);
         client->write(w.createBuffer());
 
         client->setStatus(Client::Connected);
-        qDebug() << "[I] Client connected to" << r.fieldValue("target_host");
+        qDebug() << "[I] Client connected to" << parts.at(1);
         break;
     }
     case Client::Connected: {
@@ -134,7 +155,7 @@ void SocketServer::socket_readyRead()
 
         PacketWriter w;
         if (r.count() == 1 && r.at(0).name == "keepalive") {
-            w.pushNameValue("keepalive", "True");
+            w.pushNameValue("keepalive", true);
             client->write(w.createBuffer());
             qDebug() << "[I] Send keepalive command";
             break;
@@ -142,7 +163,7 @@ void SocketServer::socket_readyRead()
 
         if (parts.count() == 3) {
             if (parts.at(0) == "OPEN_SESSION_SUCCESSFUL") {
-                qDebug() << "Session id: " << r.fieldValue("native_session_id");
+                qDebug() << "[I[ Session id is" << r.fieldValue("native_session_id");
                 break;
             }
         }

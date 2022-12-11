@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QString>
 #include <QTcpSocket>
 
 class Client : public QTcpSocket
@@ -15,6 +16,10 @@ public:
 
     void setStatus(Status newStatus);
 
+    QString cert() const;
+    void setCert(const QString &newCert);
+
 private:
     Status _status;
+    QString _cert;
 };

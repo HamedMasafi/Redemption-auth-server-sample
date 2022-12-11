@@ -14,12 +14,13 @@ void PacketWriter::pushAsk(const QString &name) {
     _count++;
 }
 
-void PacketWriter::pushNameValue(const QString &name, const QString &value) {
+void PacketWriter::pushNameValue(const QString &name, const QVariant &value) {
     _buffer.append("!");
     _buffer.append(name.size());
     _buffer.append(name.toUtf8());
 
-    auto n = value.size();
+    auto str = value.toString().toUtf8();
+    auto n = str.size();
     char ch1 = n & 0xFF;
     n >>= 8;
     char ch2 = n & 0xFF;
@@ -31,13 +32,8 @@ void PacketWriter::pushNameValue(const QString &name, const QString &value) {
     _buffer.append(ch3);
     _buffer.append(ch2);
     _buffer.append(ch1);
-    _buffer.append(value.toUtf8());
+    _buffer.append(str);
     _count++;
-}
-
-void PacketWriter::pushNameValueBool(const QString &name, bool value)
-{
-    pushNameValue(name, value ? QStringLiteral("True") : QStringLiteral("False"));
 }
 
 QByteArray PacketWriter::createBuffer() const

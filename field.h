@@ -5,13 +5,13 @@
 
 struct Field {
     QString name;
-    QString value;
+    QByteArray value;
     bool isAsk;
     bool isValid;
 
     Field();
     Field(const QString &name);
-    Field(const QString &name, const QString &value);
+    Field(const QString &name, const QByteArray &value);
 };
 
 

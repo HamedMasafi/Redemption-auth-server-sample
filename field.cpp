@@ -9,7 +9,7 @@ Field::Field(const QString &name)
     , isValid(true)
 {}
 
-Field::Field(const QString &name, const QString &value)
+Field::Field(const QString &name, const QByteArray &value)
     : name(name)
     , value(value)
     , isAsk(false)
